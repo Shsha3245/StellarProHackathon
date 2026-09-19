@@ -1,15 +1,80 @@
 'use client';
-import { useState } from 'react';
+
+import { useState, useEffect } from 'react';
+
+interface WalletBalance {
+  role: string;
+  address: string;
+  balance: string;
+  share: string;
+  color: string;
+}
 
 export default function Home() {
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt] = useState('A futuristic Stellar blockchain cyberpunk city, 8k render');
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<{ success: boolean; txHash?: string; imageUrl?: string; error?: string } | null>(null);
 
-  // TRY ve USDC Dönüşüm Mantığı (Örn: 1 USD = 48.78 TRY)
-  const usdRate = 48.78;
-  const userTryBalance = 1000;
-  const userUsdcBalance = (userTryBalance / usdRate).toFixed(2);
+  // 4 Cüzdanın Canlı Durumu
+  const [wallets, setWallets] = useState<WalletBalance[]>([
+    {
+      role: 'Müşteri (User)',
+      address: 'GCELJJBYRUR5TBNE2ZMISV5RDQCM5UDYWKOTYNWMNXRENANM6TTSPHMJ',
+      balance: '...',
+      share: 'Ödeyen (-1.0 XLM)',
+      color: 'border-blue-500/50 bg-blue-950/20',
+    },
+    {
+      role: 'AI Model Provider',
+      address: process.env.NEXT_PUBLIC_AI_PROVIDER_PUBKEY || 'GATQXW6AFM3OUHIO2YTZIS4AZTDSXFB5V5SYGNF7DP5HLFIKDFDBGU2T',
+      balance: '...',
+      share: '+%40 (0.4 XLM)',
+      color: 'border-purple-500/50 bg-purple-950/20',
+    },
+    {
+      role: 'Prompt Creator',
+      address: process.env.NEXT_PUBLIC_PROMPT_CREATOR_PUBKEY || 'GBANHOL7HNMQCHCLIIK4EN2PXW4C2YZZN4CL7GP3B4ECNYHRDRZN5U3M',
+      balance: '...',
+      share: '+%40 (0.4 XLM)',
+      color: 'border-emerald-500/50 bg-emerald-950/20',
+    },
+    {
+      role: 'Agency Vault',
+      address: process.env.NEXT_PUBLIC_AGENCY_VAULT_PUBKEY || 'GBWMWQZ2RQYP252AKEWMALQ3SX6A7JHUTYQMQBTA4NT4NQS66AWHNOZT',
+      balance: '...',
+      share: '+%20 (0.2 XLM)',
+      color: 'border-amber-500/50 bg-amber-950/20',
+    },
+  ]);
+
+  // Horizon API'den Bakiyeleri Çek
+  const fetchBalances = async () => {
+    try {
+      const updatedWallets = await Promise.all(
+        wallets.map(async (w) => {
+          try {
+            const res = await fetch(`https://horizon-testnet.stellar.org/accounts/${w.address}`);
+            if (!res.ok) return { ...w, balance: '0.00' };
+            const data = await res.json();
+            const nativeBalance = data.balances.find((b: any) => b.asset_type === 'native');
+            return {
+              ...w,
+              balance: nativeBalance ? parseFloat(nativeBalance.balance).toFixed(2) : '0.00',
+            };
+          } catch {
+            return { ...w, balance: 'Hata' };
+          }
+        })
+      );
+      setWallets(updatedWallets);
+    } catch (e) {
+      console.error('Bakiye çekme hatası:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchBalances();
+  }, []);
 
   const handleGenerate = async () => {
     setLoading(true);
@@ -19,111 +84,157 @@ export default function Home() {
       const res = await fetch('/api/generate-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt,
-          userSecretKey: process.env.NEXT_PUBLIC_USER_SECRET, // Hex veya S-key
-        }),
+        body: JSON.stringify({ prompt }),
       });
 
       const data = await res.json();
       setResult(data);
+
+      if (data.success) {
+        // İşlem başarılıysa bakiyeleri hemen güncelle
+        setTimeout(fetchBalances, 1500);
+      }
     } catch (err: any) {
-      setResult({
-        success: false,
-        error: err.message || 'Sunucuya bağlanırken bir hata oluştu.',
-      });
+      setResult({ success: false, error: err.message });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="max-w-4xl mx-auto p-8 space-y-8 font-sans">
-      <header className="border-b pb-4 flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Stellar AI Micro-Split & Ramp</h1>
-          <p className="text-sm text-gray-500">TL On-Ramp ➔ 10 Cent AI Split ➔ TL Off-Ramp</p>
-        </div>
-        <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg text-right">
-          <span className="text-xs text-gray-500 block">Kullanıcı Bakiyesi</span>
-          <span className="font-bold text-lg text-blue-700">
-            {userTryBalance.toLocaleString('tr-TR')} TRY (~{userUsdcBalance} USDC)
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans">
+      {/* Navbar */}
+      <nav className="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-50 px-8 py-4 flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-blue-500 flex items-center justify-center font-bold text-white">
+            S
+          </div>
+          <span className="font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-400">
+            Stellar SplitRamp AI Agency
           </span>
         </div>
-      </header>
+        <div className="flex gap-6 text-sm text-slate-400">
+          <a href="#dashboard" className="hover:text-white transition">Cüzdanlar</a>
+          <a href="#playground" className="hover:text-white transition">AI Playground</a>
+          <a href="#agency" className="hover:text-white transition">Ajans Hizmetleri</a>
+        </div>
+      </nav>
 
-      {/* AI Prompt Input */}
-      <div className="bg-white p-6 rounded-xl border shadow-sm space-y-4">
-        <h2 className="font-semibold text-lg">Görsel Üret (Maliyet: $0.10 USDC)</h2>
-        <div className="flex gap-4">
-          <input
-            type="text"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Örn: Cyberpunk style Istanbul Bosphorus bridge at night..."
-            className="flex-1 border p-3 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            onClick={handleGenerate}
-            disabled={loading || !prompt}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50"
+      {/* Hero Section */}
+      <section className="px-8 py-20 text-center max-w-5xl mx-auto space-y-6">
+        <span className="inline-block px-4 py-1.5 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+          Powered by Stellar Testnet • Atomic XLM Micro-Splits
+        </span>
+        <h1 className="text-5xl font-extrabold tracking-tight sm:text-6xl text-slate-100">
+          Otonom AI Üretimi & <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400">Şeffaf Telif Paylaşımı</span>
+        </h1>
+        <p className="text-lg text-slate-400 max-w-3xl mx-auto">
+          Müşterileriniz görsel üretsin, ödemeler akıllı altyapıyla Model Sağlayıcısı (%40), Prompt Sanatçısı (%40) ve Ajans Kasası (%20) arasında anında bölünsün.
+        </p>
+      </section>
+
+      {/* 4 Cüzdan Canlı Bakiye Paneli */}
+      <section id="dashboard" className="max-w-6xl mx-auto px-8 mb-16">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <span>💳</span> Canlı Cüzdan & Gelir Dağılımı
+          </h2>
+          <button 
+            onClick={fetchBalances} 
+            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded border border-slate-700 transition"
           >
-            {loading ? 'Dağıtılıyor & Üretiliyor...' : 'Görsel Üret ($0.10)'}
+            🔄 Bakiyeleri Yenile
           </button>
         </div>
-      </div>
 
-      {/* Hata Durumu Gösterimi */}
-      {result && !result.success && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm">
-          <p className="font-bold">❌ İşlem Başarısız Hatası:</p>
-          <p>{result.error || 'Bilinmeyen bir hata oluştu.'}</p>
-          {result.details && (
-            <pre className="mt-2 text-xs bg-red-100 p-2 rounded overflow-x-auto">
-              {JSON.stringify(result.details, null, 2)}
-            </pre>
-          )}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {wallets.map((w, idx) => (
+            <div key={idx} className={`p-5 rounded-xl border ${w.color} backdrop-blur flex flex-col justify-between`}>
+              <div>
+                <span className="text-xs font-medium uppercase tracking-wider text-slate-400">{w.role}</span>
+                <p className="text-2xl font-black mt-2 text-white">{w.balance} <span className="text-xs font-normal text-slate-400">XLM</span></p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-slate-800/80">
+                <span className="text-xs font-semibold text-purple-300 block">{w.share}</span>
+                <p className="text-[10px] text-slate-500 font-mono truncate mt-1" title={w.address}>{w.address}</p>
+              </div>
+            </div>
+          ))}
         </div>
-      )}
+      </section>
 
-      {/* Başarılı Sonuç & Canlı Stellar İşlemi */}
-      {result && result.success && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-gray-50 p-4 rounded-xl border">
-            <h3 className="font-semibold mb-2 text-sm text-gray-700">Üretilen Görsel</h3>
-            <img src={result.imageUrl} alt="AI Generated" className="w-full h-auto rounded-lg shadow" />
+      {/* Interactive AI Playground */}
+      <section id="playground" className="max-w-4xl mx-auto px-8 py-12 bg-slate-900/60 border border-slate-800 rounded-2xl mb-20 backdrop-blur">
+        <h2 className="text-2xl font-bold mb-2">🎨 AI Prompt Studio</h2>
+        <p className="text-sm text-slate-400 mb-6">Bir prompt seçin veya kendi isteminizi yazın. Görsel üretildiğinde 1.0 XLM tek işlemde 3 paydaşa bölünecektir.</p>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-2">Prompt İstemi</label>
+            <input
+              type="text"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-purple-500 transition"
+              placeholder="Prompt yazın..."
+            />
           </div>
 
-          <div className="bg-gray-900 text-green-400 p-5 rounded-xl font-mono text-xs space-y-3 overflow-x-auto">
-            <div className="flex items-center justify-between border-b border-gray-800 pb-2">
-              <span className="text-gray-400">Stellar Atomic Split Status</span>
-              <span className="bg-green-900/50 text-green-300 px-2 py-0.5 rounded text-[10px]">SUCCESS</span>
-            </div>
-            <p className="text-gray-300 break-all">Tx Hash: {result.txHash}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPrompt('A futuristic Stellar blockchain cyberpunk city, 8k render')}
+              className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded transition"
+            >
+              🌆 Cyberpunk City
+            </button>
+            <button
+              onClick={() => setPrompt('Cute red panda coding on a laptop in a cozy room, digital art')}
+              className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded transition"
+            >
+              🐼 Red Panda Dev
+            </button>
+          </div>
 
-            {/* Optional Chaining (?.): Sayfanın patlamasını engeller */}
-            {result.costDetail && (
-              <div className="space-y-1 text-gray-300">
-                <p className="text-white font-bold">Dağıtım Detayı ($0.10 USDC):</p>
-                <p>├─ AI Provider (%40) : {result.costDetail.aiShare}</p>
-                <p>├─ Prompt Writer (%40): {result.costDetail.creatorShare}</p>
-                <p>└─ Agency Vault (%20) : {result.costDetail.agencyShare}</p>
+          <button
+            onClick={handleGenerate}
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-semibold py-3.5 rounded-lg transition disabled:opacity-50 shadow-lg shadow-purple-500/10"
+          >
+            {loading ? '⚡ Stellar Ağında Ödeme Bölünüyor & Görsel Üretiliyor...' : '🚀 Görsel Üret (1.0 XLM Micro-Split)'}
+          </button>
+        </div>
+
+        {/* Sonuç Ekranı */}
+        {result && (
+          <div className="mt-8 pt-6 border-t border-slate-800">
+            {result.success ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-emerald-950/30 border border-emerald-500/30 rounded-lg text-emerald-400 text-sm flex justify-between items-center">
+                  <span>✅ **Ödeme Başarılı:** XLM 3 cüzdana atomik bölündü!</span>
+                  <a
+                    href={`https://horizon-testnet.stellar.org/transactions/${result.txHash}/operations`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs underline hover:text-emerald-300"
+                  >
+                    Horizon Proof ↗
+                  </a>
+                </div>
+
+                {result.imageUrl && (
+                  <div className="relative rounded-lg overflow-hidden border border-slate-800 bg-slate-950">
+                    <img src={result.imageUrl} alt="AI Result" className="w-full h-auto object-cover max-h-[400px]" />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-4 bg-rose-950/30 border border-rose-500/30 rounded-lg text-rose-400 text-sm">
+                ❌ İşlem Başarısız: {result.error}
               </div>
             )}
-
-            {result.txHash && (
-              <a
-                href={`https://stellar.expert/explorer/testnet/tx/${result.txHash}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-block text-blue-400 underline pt-2"
-              >
-                Stellar Expert'te İncele ↗
-              </a>
-            )}
           </div>
-        </div>
-      )}
-    </main>
+        )}
+      </section>
+    </div>
   );
 }
